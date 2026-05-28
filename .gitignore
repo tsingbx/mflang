@@ -1,0 +1,4 @@
+*.DS_Store
+.vscode/
+build/
+[Bb][Uu][Ii][Dd]

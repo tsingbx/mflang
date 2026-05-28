@@ -1,10 +1,15 @@
 #include "ast.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Verifier.h"
 
 std::unique_ptr<LLVMContext> ptrTheContext;
 std::unique_ptr<IRBuilder<> > ptrBuilder;
 std::unique_ptr<Module> ptrTheModule;
+std::unique_ptr<llvm::legacy::FunctionPassManager> ptrTheFPM;
 
 static std::map<std::string, Value *> NamedValues;
 
@@ -12,6 +17,20 @@ void InitializeModule() {
   ptrTheContext = std::make_unique<LLVMContext>();
   ptrBuilder = std::make_unique<IRBuilder<> >(*ptrTheContext);
   ptrTheModule = std::make_unique<Module>("mflang", *ptrTheContext);
+}
+
+void InitializeModuleAndPassManager(void) {
+    // Create a new pass manager attached to it.
+    ptrTheFPM = std::make_unique<llvm::legacy::FunctionPassManager>(ptrTheModule.get());
+    // Do simple "peephole" optimizations and bit-twiddling optzns
+    ptrTheFPM->add(createInstructionCombiningPass());
+    // Reassociate expressions.
+    ptrTheFPM->add(createReassociatePass());
+    // Eliminate Common SubExpressions.
+    ptrTheFPM->add(createGVNPass());
+    // Simplify the control flow graph (deleting unreachable blocks, etc).
+    ptrTheFPM->add(createCFGSimplificationPass());
+    ptrTheFPM->doInitialization();
 }
 
 void PrintModule() {
@@ -133,6 +152,8 @@ Function *FunctionAST::codegen()
     ptrBuilder->CreateRet(retVal);
     // Validate the generated code, checking for consistency.
     verifyFunction(*theFunction);
+    // Optimize the function
+    ptrTheFPM->run(*theFunction);
     return theFunction;
   }
   // Error reading body, remove function.

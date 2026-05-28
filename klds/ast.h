@@ -13,6 +13,7 @@
 using namespace llvm;
 
 extern void InitializeModule();
+extern void InitializeModuleAndPassManager(void);
 extern void PrintModule();
 
 /// ExprAST - Base class for all expression nodes.

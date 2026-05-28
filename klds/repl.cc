@@ -3,6 +3,7 @@
 
 void startREPL() {
     InitializeModule();
+    InitializeModuleAndPassManager();
     fprintf(stderr, "ready> ");
     Parser p;
     p.getNextToken();
