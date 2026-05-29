@@ -1,36 +1,56 @@
 #include "ast.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Passes/StandardInstrumentations.h"
+#include "llvm/Passes/PassBuilder.h" 
+#include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/Reassociate.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
 
 std::unique_ptr<LLVMContext> ptrTheContext;
 std::unique_ptr<IRBuilder<> > ptrBuilder;
 std::unique_ptr<Module> ptrTheModule;
-std::unique_ptr<llvm::legacy::FunctionPassManager> ptrTheFPM;
+std::unique_ptr<FunctionPassManager> ptrTheFPM;
+std::unique_ptr<LoopAnalysisManager> ptrTheLAM;
+std::unique_ptr<FunctionAnalysisManager> ptrTheFAM;
+std::unique_ptr<CGSCCAnalysisManager> ptrTheCGAM;
+std::unique_ptr<ModuleAnalysisManager> ptrTheMAM;
+std::unique_ptr<PassInstrumentationCallbacks> ptrThePIC;
+std::unique_ptr<StandardInstrumentations> ptrTheSI;
 
 static std::map<std::string, Value *> NamedValues;
 
-void InitializeModule() {
-  ptrTheContext = std::make_unique<LLVMContext>();
-  ptrBuilder = std::make_unique<IRBuilder<> >(*ptrTheContext);
-  ptrTheModule = std::make_unique<Module>("mflang", *ptrTheContext);
-}
-
 void InitializeModuleAndPassManager(void) {
-    // Create a new pass manager attached to it.
-    ptrTheFPM = std::make_unique<llvm::legacy::FunctionPassManager>(ptrTheModule.get());
-    // Do simple "peephole" optimizations and bit-twiddling optzns
-    ptrTheFPM->add(createInstructionCombiningPass());
-    // Reassociate expressions.
-    ptrTheFPM->add(createReassociatePass());
-    // Eliminate Common SubExpressions.
-    ptrTheFPM->add(createGVNPass());
-    // Simplify the control flow graph (deleting unreachable blocks, etc).
-    ptrTheFPM->add(createCFGSimplificationPass());
-    ptrTheFPM->doInitialization();
+  ptrTheContext = std::make_unique<LLVMContext>();
+  ptrTheModule = std::make_unique<Module>("mflang", *ptrTheContext);
+  //ptrTheModule->setDataLayout(ptrTheJIT->getDataLayout());
+  ptrBuilder = std::make_unique<IRBuilder<> >(*ptrTheContext);
+  
+  // Create new pass and analysis managers.
+  ptrTheFPM = std::make_unique<FunctionPassManager>();
+  ptrTheLAM = std::make_unique<LoopAnalysisManager>();
+  ptrTheFAM = std::make_unique<FunctionAnalysisManager>();
+  ptrTheCGAM = std::make_unique<CGSCCAnalysisManager>();
+  ptrTheMAM = std::make_unique<ModuleAnalysisManager>();
+  ptrThePIC = std::make_unique<PassInstrumentationCallbacks>();
+  ptrTheSI = std::make_unique<StandardInstrumentations>(*ptrTheContext, true);
+  ptrTheSI->registerCallbacks(*ptrThePIC, ptrTheMAM.get());
+  // Add transform passes
+  // Do simple "peephole" optimizations and bit-twiddling optzns
+  ptrTheFPM->addPass(InstCombinePass());
+  // Reassociate expressions
+  ptrTheFPM->addPass(ReassociatePass());
+  // Eliminate Common SubExpressions.
+  ptrTheFPM->addPass(GVNPass());
+  // Simplify the control flow graph (deleting unreachable blocks, etc).
+  ptrTheFPM->addPass(SimplifyCFGPass());
+  // Register analysis passes used in these transform passes.
+  PassBuilder PB;
+  PB.registerModuleAnalyses(*ptrTheMAM);
+  PB.registerFunctionAnalyses(*ptrTheFAM);
+  PB.crossRegisterProxies(*ptrTheLAM, *ptrTheFAM, *ptrTheCGAM, *ptrTheMAM);
 }
 
 void PrintModule() {
@@ -153,7 +173,7 @@ Function *FunctionAST::codegen()
     // Validate the generated code, checking for consistency.
     verifyFunction(*theFunction);
     // Optimize the function
-    ptrTheFPM->run(*theFunction);
+    ptrTheFPM->run(*theFunction, *ptrTheFAM);
     return theFunction;
   }
   // Error reading body, remove function.

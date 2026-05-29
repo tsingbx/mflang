@@ -2,7 +2,6 @@
 #include "repl.h"
 
 void startREPL() {
-    InitializeModule();
     InitializeModuleAndPassManager();
     fprintf(stderr, "ready> ");
     Parser p;

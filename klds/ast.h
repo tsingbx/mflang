@@ -12,7 +12,6 @@
 
 using namespace llvm;
 
-extern void InitializeModule();
 extern void InitializeModuleAndPassManager(void);
 extern void PrintModule();
 
