@@ -208,6 +208,15 @@ static void MainLoop() {
 //===----------------------------------------------------------------------===//
 
 int main() {
+  // Install standard binary operators.
+  // 1 is lowest precedence.
+  BinopPrecedence['<'] = 10;
+  BinopPrecedence['>'] = 10;
+  BinopPrecedence['+'] = 20;
+  BinopPrecedence['-'] = 20;
+  BinopPrecedence['*'] = 40; // highest.
+  BinopPrecedence['/'] = 40;
+
   // Prime the first token.
   fprintf(stderr, "ready> ");
   getNextToken();
