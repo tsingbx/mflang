@@ -312,8 +312,14 @@ Value *BinaryExprAST::codegen() {
     return Builder->CreateFSub(L, R, "subtmp");
   case '*':
     return Builder->CreateFMul(L, R, "multmp");
+  case '/':
+    return Builder->CreateFDiv(L, R, "divtmp");
   case '<':
-    L = Builder->CreateFCmpULT(L, R, "cmptmp");
+    L = Builder->CreateFCmpULT(L, R, "cmptmp-lt");
+    // Convert bool 0/1 to double 0.0 or 1.0
+    return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
+  case '>':
+    L = Builder->CreateFCmpUGT(L, R, "cmptmp-gt");
     // Convert bool 0/1 to double 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
   default:
@@ -551,8 +557,10 @@ int main() {
   // Install standard binary operators.
   // 1 is lowest precedence.
   BinopPrecedence['<'] = 10;
+  BinopPrecedence['>'] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
+  BinopPrecedence['/'] = 40;
   BinopPrecedence['*'] = 40; // highest.
 
   // Prime the first token.
