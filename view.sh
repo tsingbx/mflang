@@ -1,2 +1,2 @@
-
-llvm-as < input.txt | opt -passes=view-cfg
+#!/bin/sh
+llvm-as < view.ll | opt -passes=view-cfg
